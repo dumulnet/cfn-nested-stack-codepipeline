@@ -3,6 +3,28 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Create a CodePipeline to include Nested CloudFormation, CodeBuild and Approval steps.
 
 Parameters:
+# CodePipeline Notification
+
+  AlertDetailType:
+    Description: The level of detail to include in the notifications for this resource. (see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-codestarnotifications-notificationrule.html)
+    Default: FULL
+    Type: String
+    AllowedValues:
+      - FULL
+      - BASIC
+
+  NotificationTargetType:
+    Description: The target type. Can be an Amazon Simple Notification Service topic or AWS Chatbot client.
+    Default: SNS
+    Type: String
+    AllowedValues:
+     # - AWSChatbotSlack
+      - SNS
+
+  SnsTopicArns:
+    Description: Notification Topic Arn
+    Type: String
+
 
   TargetCFNStack:
     Type: String
@@ -266,3 +288,34 @@ Resources:
         Type: S3
         Location:
           Ref: ArtifactStoreS3Location
+
+  NotificationRule:
+    Type: AWS::CodeStarNotifications::NotificationRule
+    Properties:
+      Name: 
+        !Sub
+          - Infra-NotiRule-${RandomGUID}
+          - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      Resource: !Sub 
+          - arn:${AWS::Partition}:codepipeline:${AWS::Region}:${AWS::AccountId}:${CodePipeline}
+          - {CodePipeline: !Ref DeployPipeline}
+      DetailType: !Ref AlertDetailType
+
+      EventTypeIds:
+        - codepipeline-pipeline-pipeline-execution-failed
+        - codepipeline-pipeline-pipeline-execution-canceled
+        - codepipeline-pipeline-pipeline-execution-started
+        - codepipeline-pipeline-pipeline-execution-resumed
+        - codepipeline-pipeline-pipeline-execution-succeeded
+        - codepipeline-pipeline-pipeline-execution-superseded
+        - codepipeline-pipeline-manual-approval-needed
+      Targets:
+        - TargetType: !Ref NotificationTargetType
+          TargetAddress: !Ref SnsTopicArns
+
+Outputs:
+  CodePipelineName:
+    Description: The Pipeline name
+    Value: !Ref DeployPipeline
+    Export:
+      Name: !Sub ${AWS::StackName}-CodePipelineName
